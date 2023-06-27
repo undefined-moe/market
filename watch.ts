@@ -1,6 +1,4 @@
 import superagent from 'superagent';
-import yaml from 'js-yaml';
-import fs from 'fs';
 import _ from 'lodash';
 import proxy from 'superagent-proxy';
 import { Collection, MongoClient, WriteConcern } from 'mongodb';
@@ -117,6 +115,8 @@ ${formatSeconds(((new Date(order.issued).getTime() + order.duration * 24 * 3600 
             ]);
             if (cheaperOrder) return;
             if (itemInfo?.name.en.endsWith('SKIN')) return;
+            if (itemInfo?.name.en.endsWith('Men\'s')) return;
+            if (itemInfo?.name.en.endsWith('Women\'s')) return;
             const [sec, ...rem] = await coll.find({ type_id: order.type_id, is_buy_order: false, _id: { $ne: order.order_id } }).sort({ price: 1 }).limit(8).toArray();
             if (rem.length > 5 && sec && order.price < 0.8 * sec.price) queue.push(order.type_id);
         }

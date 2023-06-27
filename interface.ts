@@ -13,3 +13,8 @@ export interface MarketEntry {
     volume_remain: number;
     volume_total: number;
 }
+export interface IDInfo {
+    _id: number;
+    name: Record<string, string>;
+    alias?: string[];
+}

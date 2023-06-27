@@ -9,19 +9,24 @@
     "show": "node -r @hydrooj/utils/lib/register show.ts",
     "sync": "node -r @hydrooj/utils/lib/register sync.ts",
     "prepareIds": "node -r @hydrooj/utils/lib/register prepare.ts",
-    "watch": "node -r @hydrooj/utils/lib/register watch.ts"
+    "watch": "node -r @hydrooj/utils/lib/register watch.ts",
+    "web": "node -r @hydrooj/utils/lib/register web.tsx"
   },
   "dependencies": {
     "@hydrooj/utils": "^1.4.13",
     "js-yaml": "^4.1.0",
+    "koa": "^2.14.2",
     "lodash": "^4.17.21",
     "mongodb": "^5.6.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "superagent": "^8.0.9",
     "superagent-proxy": "^3.0.0"
   },
   "devDependencies": {
     "@types/lodash": "^4.14.195",
     "@types/node": "^20.3.1",
+    "@types/react-dom": "^18.2.6",
     "@types/superagent": "^4.1.18",
     "typescript": "^5.1.3"
   }
