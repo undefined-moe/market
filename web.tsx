@@ -4,6 +4,7 @@ import Koa from 'koa';
 import yaml from 'js-yaml';
 import { MongoClient, WriteConcern } from 'mongodb';
 import React from 'react';
+import { connect } from './db';
 import ReactDOM from 'react-dom/server';
 
 const app = new Koa();
@@ -88,7 +89,7 @@ function Render(props) {
                                     {/* <td className="region">多美</td> */}
                                     <td className="number volume-remain">{order.volume_remain}</td>
                                     <td className="number price">{formatNumber(order.price)} ISK</td>
-                                    <td className="location"><span><span className={"system-security sec" + (s.sec / 10).toFixed(2).split('.')[1]}>{s.sec.toFixed(1)}</span> {st.name.zh}</span></td>
+                                    <td className="location"><span><span className={"system-security sec" + (s.sec / 10).toFixed(2).split('.')[1]}>{s.sec.toFixed(1)}</span> {st ? st.name.zh : s.name.zh}</span></td>
                                     <td className="number expires">{formatSeconds(((new Date(order.issued).getTime() + order.duration * 24 * 3600 * 1000) - Date.now()) / 1000)}</td>
                                     {/* <td className="number received_at">1分 前 </td> */}
                                 </tr>)
@@ -123,7 +124,7 @@ function Render(props) {
                                     {/* <td className="region">多美</td> */}
                                     <td className="number volume-remain">{order.volume_remain}</td>
                                     <td className="number price">{formatNumber(order.price)} ISK</td>
-                                    <td className="location"><span><span className={"system-security sec" + (s.sec / 10).toFixed(2).split('.')[1]}>{s.sec.toFixed(1)}</span> {st.name.zh}</span></td>
+                                    <td className="location"><span><span className={"system-security sec" + (s.sec / 10).toFixed(2).split('.')[1]}>{s.sec.toFixed(1)}</span> {st ? st.name.zh : s.name.zh}</span></td>
                                     <td className="number expires">{formatSeconds(((new Date(order.issued).getTime() + order.duration * 24 * 3600 * 1000) - Date.now()) / 1000)}</td>
                                     {/* <td className="number received_at">1分 前 </td> */}
                                 </tr>)
@@ -137,30 +138,25 @@ function Render(props) {
 }
 
 async function main() {
-    const client = await MongoClient.connect(dburi, { writeConcern: new WriteConcern('majority') });
-    const db = client.db(dbName);
-    const coll = db.collection<MarketEntry>('orders');
-    const collId = db.collection<IDInfo>('ids');
+    const { collOrder: coll, collId, collGroup, collStation, collMarketGroup } = await connect();
     app.use(async (ctx, next) => {
         console.log(ctx.path);
         const input = decodeURIComponent(ctx.path.slice(1)).toLowerCase();
         let item = await collId.findOne({ alias: input });
-        if (!item) {
-            item = await collId.findOne({ alias: { $regex: input } });
-        }
+        if (!item) item = await collId.findOne({ alias: { $regex: input } });
         if (!item) return null;
-        const sellInfo = await coll.find({ type_id: item._id, is_buy_order: false }).sort({ price: 1 }).limit(8).toArray();
-        const buyInfo = await coll.find({ type_id: item._id, is_buy_order: true }).sort({ price: -1 }).limit(8).toArray();
+        const sellInfo = await coll.find({ type_id: item._id, is_buy_order: false, volume_remain: { $gt: 0 } }).sort({ price: 1 }).limit(8).toArray();
+        const buyInfo = await coll.find({ type_id: item._id, is_buy_order: true, volume_remain: { $gt: 0 } }).sort({ price: -1 }).limit(8).toArray();
         const systems = Array.from(new Set([...sellInfo, ...buyInfo].map(i => i.system_id)));
         const stations = Array.from(new Set([...sellInfo, ...buyInfo].map(i => i.location_id)));
         const systemInfo = await collId.find({ _id: { $in: systems } }).toArray();
-        const stationInfo = await collId.find({ _id: { $in: stations } }).toArray();
-        const group = await collId.findOne({ _id: item.groupID });
-        // const marketGroup = await collId.findOne({ _id: item.marketGroupID });
+        const stationInfo = await collStation.find({ _id: { $in: stations } }).toArray();
+        const group = await collGroup.findOne({ _id: item.groupID });
+        const marketGroup = await collMarketGroup.findOne({ _id: item.marketGroupID });
         ctx.body = ReactDOM.renderToStaticMarkup(<Render
             item={item}
             itemGroup={group}
-            // itemMarketGroup={marketGroup}
+            itemMarketGroup={marketGroup}
             sellInfo={sellInfo}
             buyInfo={buyInfo}
             systemInfo={systemInfo}

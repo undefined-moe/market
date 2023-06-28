@@ -3,7 +3,7 @@ import fs from 'fs';
 import { connect } from './db';
 
 async function main() {
-    const { collId: coll } = await connect();
+    const { collId: coll, collGroup,collMarketGroup, collStation } = await connect();
 
     console.log('Loading static data...');
     const items = yaml.load(fs.readFileSync('./sde/fsd/typeIDs.yaml', 'utf-8'));
@@ -43,11 +43,19 @@ async function main() {
     console.log('Loading item groups...');
     const groups = yaml.load(fs.readFileSync('./sde/fsd/groupIDs.yaml', 'utf-8'));
     for (const key in groups) {
-        await coll.updateOne({ _id: +key }, { $set: { name: groups[key].name } }, { upsert: true });
+        await collGroup.updateOne({ _id: +key }, { $set: { name: groups[key].name } }, { upsert: true });
+    }
+    console.log('Loading market groups...');
+    const marketGroups = yaml.load(fs.readFileSync('./sde/fsd/marketGroups.yaml', 'utf-8'));
+    for (const key in marketGroups) {
+        await collMarketGroup.updateOne({ _id: +key }, { $set: { name: marketGroups[key].name } }, { upsert: true });
     }
     console.log('Loading stations...');
     const names = yaml.load(fs.readFileSync('./sde/bsd/invNames.yaml', 'utf-8'));
-    await coll.insertMany(names.map(l => ({ _id: l.itemID, name: { zh: l.itemName, en: l.itemName }, alias: [l.itemName] }), { ordered: false }).catch(() => { });
+    await collStation.insertMany(names.map(l => ({ _id: l.itemID, name: { zh: l.itemName, en: l.itemName }, alias: [l.itemName] }), { ordered: false }))
+        .catch((e) => {
+            console.error(e);
+        });
     process.exit(0);
 }
 

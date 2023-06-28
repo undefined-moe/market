@@ -85,46 +85,53 @@ ${formatSeconds(((new Date(order.issued).getTime() + order.duration * 24 * 3600 
         const { _id, name } = await db.collection('ids').findOne({ $or: [{ alias: itemName }, { _id: itemName }] });
         console.log(_id, name.zh, name.en);
         if (!_id) return null;
-        const sellInfo = await coll.find({ type_id: _id, is_buy_order: false }).sort({ price: 1 }).limit(8).toArray();
+        const sellInfo = await coll.find({ type_id: _id, is_buy_order: false, volume_remain: { $gt: 0 } }).sort({ price: 1 }).limit(8).toArray();
         console.log('卖单：');
         for (const c of sellInfo) await printOrder(c);
-        const buyInfo = await coll.find({ type_id: _id, is_buy_order: true }).sort({ price: -1 }).limit(8).toArray();
+        const buyInfo = await coll.find({ type_id: _id, is_buy_order: true, volume_remain: { $gt: 0 }}).sort({ price: -1 }).limit(8).toArray();
         console.log('收单：');
         for (const c of buyInfo) await printOrder(c);
     }
 
-    setInterval(() => {
+    setInterval(async () => {
         if (queue.length) {
             const i = queue.shift();
-            openClient(i);
-            showOrders(i);
+            try {
+                await openClient(i);
+                await showOrders(i);
+            } catch (e) {
+                console.error(e);
+            }
         }
     }, 15000);
 
     async function doCheckOrder(order: MarketEntry) {
         if (order.is_buy_order) {
             const [cheaperOrder, itemInfo] = await Promise.all([
-                coll.findOne({ type_id: order.type_id, is_buy_order: false, price: { $lt: order.price } }),
+                coll.findOne({ type_id: order.type_id, is_buy_order: false, volume_remain: { $gt: 0 }, price: { $lt: order.price } }),
                 collId.findOne({ _id: order.type_id }),
             ]);
 
         } else {
             const [cheaperOrder, itemInfo] = await Promise.all([
-                coll.findOne({ type_id: order.type_id, is_buy_order: false, price: { $lt: order.price } }),
+                coll.findOne({ type_id: order.type_id, is_buy_order: false, volume_remain: { $gt: 0 }, price: { $lt: order.price } }),
                 collId.findOne({ _id: order.type_id }),
             ]);
             if (cheaperOrder) return;
             if (itemInfo?.name.en.endsWith('SKIN')) return;
-            if (itemInfo?.name.en.endsWith('Men\'s')) return;
-            if (itemInfo?.name.en.endsWith('Women\'s')) return;
-            const [sec, ...rem] = await coll.find({ type_id: order.type_id, is_buy_order: false, _id: { $ne: order.order_id } }).sort({ price: 1 }).limit(8).toArray();
+            if (itemInfo?.name.en.startsWith('Men\'s')) return;
+            if (itemInfo?.name.en.startsWith('Women\'s')) return;
+            const [sec, ...rem] = await coll.find({ type_id: order.type_id, volume_remain: { $gt: 0 }, is_buy_order: false, _id: { $ne: order.order_id } }).sort({ price: 1 }).limit(8).toArray();
             if (rem.length > 5 && sec && order.price < 0.8 * sec.price) queue.push(order.type_id);
         }
     }
 
     async function reloadOrders(regionId, page) {
         console.log('Reloading orders in region %d for page %d', regionId, page);
-        const res = await superagent.get(`https://esi.evetech.net/v1/markets/${regionId}/orders/?page=` + page);
+        const res = await superagent
+            .get(`https://esi.evetech.net/v1/markets/${regionId}/orders/?page=` + page)
+            .timeout(10000)
+            .retry(3);
         const old = await coll.find({ _id: { $in: res.body.map(order => order.order_id) } }).toArray();
         for (const order of res.body) {
             const oldOrder: any = old.find(i => i._id === order.order_id);
@@ -134,6 +141,7 @@ ${formatSeconds(((new Date(order.issued).getTime() + order.duration * 24 * 3600 
             }
             const r = await coll.updateOne({ _id: order.order_id }, { $set: order }, { upsert: true });
             if (new Date(order.issued).getTime() > Date.now() - 20 * 60 * 1000) continue;
+            if (order.volume_remain === 0) continue;
             doCheckOrder(order);
         }
         return res.body.length;
@@ -144,7 +152,7 @@ ${formatSeconds(((new Date(order.issued).getTime() + order.duration * 24 * 3600 
             const t = await reloadOrders(10000002, i); // The Forge
             if (t < 1000) i = 0;
         } catch (e) {
-
+            console.error(e);
         }
     }
 }
